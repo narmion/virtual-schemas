@@ -16,6 +16,7 @@ public class ResponseJsonSerializer {
     public static final String PREDICATE_PREFIX = "FN_PRED_";
     public static final String AGGREGATE_FUNCTION_PREFIX = "FN_AGG_";
     public static final String LITERAL_PREFIX = "LITERAL_";
+    public static final String JOIN_PREFIX = "JOIN_";
 
     public static String makeCreateVirtualSchemaResponse(SchemaMetadata remoteMeta) {
         JsonObject res = Json.createObjectBuilder()
@@ -56,6 +57,10 @@ public class ResponseJsonSerializer {
         }
         for (LiteralCapability literal : capabilities.getLiteralCapabilities()) {
             String capName = LITERAL_PREFIX + literal.name();
+            arrayBuilder.add(capName);
+        }
+        for (JoinCapability join : capabilities.getJoinCapabilities()) {
+            String capName = JOIN_PREFIX + join.name();
             arrayBuilder.add(capName);
         }
         builder.add("capabilities", arrayBuilder);

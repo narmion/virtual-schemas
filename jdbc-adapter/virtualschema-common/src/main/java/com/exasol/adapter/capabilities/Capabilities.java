@@ -16,6 +16,7 @@ public class Capabilities {
     private Set<PredicateCapability> predicateCaps = new HashSet<>();
     private Set<AggregateFunctionCapability> aggregateFunctionCaps = new HashSet<>();
     private Set<LiteralCapability> literalCaps = new HashSet<>();
+    private Set<JoinCapability> joinCaps = new HashSet<>();
 
     public void supportAllCapabilities() {
         for (MainCapability cap : MainCapability.values()) {
@@ -33,7 +34,12 @@ public class Capabilities {
         for (LiteralCapability cap : LiteralCapability.values()) {
             supportLiteral(cap);
         }
+        for (JoinCapability cap : JoinCapability.values()) {
+            supportJoin(cap);
+        }
     }
+
+
 
     public void subtractCapabilities(Capabilities capabilitiesToSubtract) {
         for (MainCapability cap : capabilitiesToSubtract.mainCapabilities) {
@@ -68,6 +74,10 @@ public class Capabilities {
     public void supportAggregateFunction(AggregateFunctionCapability functionType) {
         aggregateFunctionCaps.add(functionType);
     }
+
+    private void supportJoin(JoinCapability caps) {
+        joinCaps.add(caps);
+    }
     
     public void supportLiteral(LiteralCapability literal) {
         literalCaps.add(literal);
@@ -91,5 +101,9 @@ public class Capabilities {
     
     public Set<LiteralCapability> getLiteralCapabilities() {
         return literalCaps;
+    }
+
+    public Set<JoinCapability> getJoinCapabilities() {
+        return joinCaps;
     }
 }
