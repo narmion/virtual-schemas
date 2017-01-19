@@ -51,5 +51,9 @@ public enum SqlNodeType {
     
     ORDER_BY,
     
-    LIMIT;
+    LIMIT,
+
+
+    JOIN,
+    JOINED_TABLE
 }

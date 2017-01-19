@@ -199,7 +199,7 @@ public class RequestJsonParser {
         if (select.containsKey("limit")) {
             limit = parseLimit(select.getJsonObject("limit"));
         }
-        return new SqlStatementSelect((SqlTable)table, selectList, whereClause, groupByClause, having, orderBy, limit);
+        return new SqlStatementSelect(table, selectList, whereClause, groupByClause, having, orderBy, limit);
     }
     
     private List<SqlNode> parseExpressionList(JsonArray array) {
@@ -303,7 +303,12 @@ public class RequestJsonParser {
             String columnName = exp.getString("name");
             String tableName = exp.getString("tableName");
             ColumnMetadata columnMetadata = findColumnMetadata(tableName, columnName);
-            return new SqlColumn(columnId, columnMetadata);
+            if (exp.containsKey("tableAlias")) {
+                String tableAlias = exp.getString("tableAlias");
+                return new SqlColumn(columnId, tableAlias, columnMetadata);
+            } else {
+                return new SqlColumn(columnId, columnMetadata);
+            }
         }
         case LITERAL_NULL: {
             return new SqlLiteralNull();
@@ -517,6 +522,40 @@ public class RequestJsonParser {
             return new SqlFunctionAggregateGroupConcat(fromAggregationFunctionName(functionName),
                     setArguments, orderBy, distinct, separator);
         }
+
+        case JOIN: {
+            List<SqlNode> parents = new ArrayList<>();
+            if (exp.containsKey("parent_tables")) {
+                for (JsonObject argument : exp.getJsonArray("parent_tables").getValuesAs(JsonObject.class)) {
+                    parents.add(parseExpression(argument));
+                }
+            }
+
+            List<SqlNode> adjoins = new ArrayList<>();
+            if (exp.containsKey("adjoined_tables")) {
+                for (JsonObject argument : exp.getJsonArray("adjoined_tables").getValuesAs(JsonObject.class)) {
+                    adjoins.add(parseExpression(argument));
+                }
+            }
+
+            SqlJoinType joinType = SqlJoinType.valueOf(exp.getString("join_type").toUpperCase());
+            SqlNode condition = null;
+            if (exp.containsKey("condition")) {
+                condition = parseExpression(exp.getJsonObject("condition"));
+            }
+            return new SqlJoin(parents, adjoins, joinType, condition);
+        }
+
+        case JOINED_TABLE: {
+            List<SqlNode> joins = new ArrayList<>();
+            if (exp.containsKey("joins")) {
+                for (JsonObject argument : exp.getJsonArray("joins").getValuesAs(JsonObject.class)) {
+                    joins.add(parseExpression(argument));
+                }
+            }
+            return new SqlJoinedTable(joins);
+        }
+
         default:
             throw new RuntimeException("Unknown node type: " + typeName);
         }

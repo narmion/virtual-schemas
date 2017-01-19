@@ -32,6 +32,8 @@ public class SqlGenerationVisitor implements SqlNodeVisitor<String> {
     private SqlDialect dialect;
     private SqlGenerationContext context;
 
+    private boolean firstJoin = false;
+
     public SqlGenerationVisitor(SqlDialect dialect, SqlGenerationContext context) {
         this.dialect = dialect;
         this.context = context;
@@ -101,7 +103,12 @@ public class SqlGenerationVisitor implements SqlNodeVisitor<String> {
 
     @Override
     public String visit(SqlColumn column) {
-        return dialect.applyQuoteIfNeeded(column.getName());
+
+        if (column.getTableAlias() == null) {
+            return dialect.applyQuoteIfNeeded(column.getName());
+        } else {
+            return dialect.applyQuoteIfNeeded(column.getTableAlias())+"."+dialect.applyQuoteIfNeeded(column.getName());
+        }
     }
 
     @Override
@@ -115,7 +122,56 @@ public class SqlGenerationVisitor implements SqlNodeVisitor<String> {
             schemaPrefix += dialect.applyQuoteIfNeeded(context.getSchemaName())
                     + dialect.getTableCatalogAndSchemaSeparator();
         }
-        return schemaPrefix + dialect.applyQuoteIfNeeded(table.getName());
+        if (!table.hasAlias()) {
+            return schemaPrefix + dialect.applyQuoteIfNeeded(table.getName());
+        } else {
+            return schemaPrefix + dialect.applyQuoteIfNeeded(table.getName())+" "+ dialect.applyQuoteIfNeeded(table.getAlias());
+        }
+    }
+
+    @Override
+    public String visit(SqlJoin sqlJoin) {
+        StringBuilder builder = new StringBuilder();
+        if (firstJoin) {
+            for (int i = 0; i < sqlJoin.getParentTables().size(); i++) {
+                if (i > 0) {
+                    builder.append(", ");
+                }
+                builder.append(sqlJoin.getParentTables().get(i).accept(this));
+            }
+        }
+        switch (sqlJoin.getJoinType()) {
+            case INNER:
+                builder.append(" INNER JOIN ");
+                break;
+        }
+        for (int i = 0; i < sqlJoin.getAdjoinedTables().size(); i++) {
+            if (i > 0) {
+                builder.append(", ");
+            }
+            builder.append(sqlJoin.getAdjoinedTables().get(i).accept(this));
+        }
+        builder.append(" ON ");
+        builder.append("(");
+        builder.append(sqlJoin.getCondition().accept(this));
+        builder.append(")");
+        return builder.toString();
+    }
+
+    @Override
+    public String visit(SqlJoinedTable sqlJoinedTable) {
+        StringBuilder builder = new StringBuilder();
+        boolean firstJoinOld = firstJoin;
+        for (int i = 0; i < sqlJoinedTable.getJoins().size(); i++) {
+            if (i == 0) {
+                firstJoin = true;
+            } else {
+                firstJoin = false;
+            }
+            builder.append(sqlJoinedTable.getJoins().get(i).accept(this));
+        }
+        firstJoin = firstJoinOld;
+        return builder.toString();
     }
 
     @Override

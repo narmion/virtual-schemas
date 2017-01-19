@@ -8,12 +8,7 @@ import com.exasol.adapter.dialects.SqlGenerationContext;
 import com.exasol.adapter.dialects.SqlGenerationVisitor;
 import com.exasol.adapter.jdbc.ColumnAdapterNotes;
 import com.exasol.adapter.metadata.ColumnMetadata;
-import com.exasol.adapter.sql.SqlColumn;
-import com.exasol.adapter.sql.SqlLimit;
-import com.exasol.adapter.sql.SqlNode;
-import com.exasol.adapter.sql.SqlNodeType;
-import com.exasol.adapter.sql.SqlSelectList;
-import com.exasol.adapter.sql.SqlStatementSelect;
+import com.exasol.adapter.sql.*;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 
@@ -38,10 +33,18 @@ public class TeradataSqlGenerationVisitor extends SqlGenerationVisitor {
                 SqlStatementSelect select = (SqlStatementSelect) selectList.getParent();
                 
                 int columnId = 0;
-                for (ColumnMetadata columnMeta : select.getFromClause().getMetadata().getColumns()) {
-                    SqlColumn sqlColumn = new SqlColumn(columnId, columnMeta);
-                    selectListElements.add( getColumnProjectionStringNoCheck(sqlColumn,  super.visit(sqlColumn)  )   );
-                    ++columnId;
+
+                if (select.getFromClause() instanceof SqlTable) {
+
+                    for (ColumnMetadata columnMeta : ((SqlTable)select.getFromClause()).getMetadata().getColumns()) {
+                        SqlColumn sqlColumn = new SqlColumn(columnId, columnMeta);
+                        selectListElements.add(getColumnProjectionStringNoCheck(sqlColumn, super.visit(sqlColumn)));
+                        ++columnId;
+                    }
+
+                } else {
+                    // TODO: Implement Joins for Teradata
+                    assert(false);
                 }
                 
             } else {
@@ -154,10 +157,16 @@ public class TeradataSqlGenerationVisitor extends SqlGenerationVisitor {
         // Do as if the user has all columns in select list
         SqlStatementSelect select = (SqlStatementSelect) selectList.getParent();
         int columnId = 0;
-        for (ColumnMetadata columnMeta : select.getFromClause().getMetadata().getColumns()) {
-        	if (nodeRequiresCast(new SqlColumn(columnId, columnMeta))) {
-                requiresCasts = true;
-                        	}
+        if (select.getFromClause() instanceof SqlTable) {
+
+            for (ColumnMetadata columnMeta : ((SqlTable) select.getFromClause()).getMetadata().getColumns()) {
+                if (nodeRequiresCast(new SqlColumn(columnId, columnMeta))) {
+                    requiresCasts = true;
+                }
+            }
+        } else {
+            // TODO: Implement Joins for Teradata
+            assert (false);
         }
 
         return requiresCasts;

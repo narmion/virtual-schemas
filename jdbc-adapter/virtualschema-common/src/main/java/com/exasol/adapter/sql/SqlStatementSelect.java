@@ -9,7 +9,7 @@ import java.util.List;
  */
 public class SqlStatementSelect extends SqlStatement {
 
-    private SqlTable fromClause;        // can be changed to SqlNode later if we support more complex things
+    private SqlNode fromClause;        // can be changed to SqlNode later if we support more complex things
     private SqlSelectList selectList;
     private SqlNode whereClause;
     private SqlExpressionList groupBy;
@@ -17,7 +17,7 @@ public class SqlStatementSelect extends SqlStatement {
     private SqlOrderBy orderBy;
     private SqlLimit limit;
     
-    public SqlStatementSelect(SqlTable fromClause, SqlSelectList selectList, SqlNode whereClause, SqlExpressionList groupBy, SqlNode having, SqlOrderBy orderBy, SqlLimit limit) {
+    public SqlStatementSelect(SqlNode fromClause, SqlSelectList selectList, SqlNode whereClause, SqlExpressionList groupBy, SqlNode having, SqlOrderBy orderBy, SqlLimit limit) {
         this.fromClause = fromClause;
         this.selectList = selectList;
         this.whereClause = whereClause;
@@ -71,7 +71,7 @@ public class SqlStatementSelect extends SqlStatement {
         return limit != null;
     }
     
-    public SqlTable getFromClause() {
+    public SqlNode getFromClause() {
         return fromClause;
     }
     

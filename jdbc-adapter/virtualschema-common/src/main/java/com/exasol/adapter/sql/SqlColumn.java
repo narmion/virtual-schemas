@@ -3,7 +3,8 @@ package com.exasol.adapter.sql;
 import com.exasol.adapter.metadata.ColumnMetadata;
 
 public class SqlColumn extends SqlNode {
-    
+
+    private String tableAlias = null;
     private int id;
     private ColumnMetadata metadata;
 
@@ -11,7 +12,16 @@ public class SqlColumn extends SqlNode {
         this.id = id;
         this.metadata = metadata;
     }
-    
+
+    public String getTableAlias() {
+        return tableAlias;
+    }
+
+    public SqlColumn(int id, String tableAlias, ColumnMetadata metadata) {
+        this(id,metadata);
+        this.tableAlias = tableAlias;
+    }
+
     public int getId() {
         return id;
     }

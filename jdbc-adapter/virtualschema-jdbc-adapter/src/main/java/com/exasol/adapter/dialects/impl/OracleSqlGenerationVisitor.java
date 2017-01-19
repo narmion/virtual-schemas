@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 
 public class OracleSqlGenerationVisitor extends SqlGenerationVisitor {
@@ -22,7 +23,7 @@ public class OracleSqlGenerationVisitor extends SqlGenerationVisitor {
         super(dialect, context);
 
         if (dialect instanceof OracleSqlDialect &&
-                ((OracleSqlDialect)dialect).getCastAggFuncToFloat()) {
+                ((OracleSqlDialect) dialect).getCastAggFuncToFloat()) {
             aggregateFunctionsCast.add(AggregateFunction.SUM);
             aggregateFunctionsCast.add(AggregateFunction.MIN);
             aggregateFunctionsCast.add(AggregateFunction.MAX);
@@ -39,7 +40,7 @@ public class OracleSqlGenerationVisitor extends SqlGenerationVisitor {
         }
 
         if (dialect instanceof OracleSqlDialect &&
-                ((OracleSqlDialect)dialect).getCastScalarFuncToFloat()) {
+                ((OracleSqlDialect) dialect).getCastScalarFuncToFloat()) {
             scalarFunctionsCast.add(ScalarFunction.ADD);
             scalarFunctionsCast.add(ScalarFunction.SUB);
             scalarFunctionsCast.add(ScalarFunction.MULT);
@@ -81,20 +82,20 @@ public class OracleSqlGenerationVisitor extends SqlGenerationVisitor {
      * ORACLE Syntax (before 12c) for LIMIT 10:</br>
      * SELECT LIMIT_SUBSELECT.* FROM
      * (
-     *  <query-with-aliases>
+     * <query-with-aliases>
      * )
      * LIMIT_SUBSELECT WHERE ROWNUM <= 30
-     *
+     * <p>
      * ORACLE Syntax (before 12c) for LIMIT 10 OFFSET 20:</br>
      * SELECT c1, c2, ... FROM
      * (
-     *  SELECT LIMIT_SUBSELECT.*, ROWNUM ROWNUM_SUB FROM
-     *  (
-     *   <query-with-aliases>
-     *  )
-     *  LIMIT_SUBSELECT WHERE ROWNUM <= 30
+     * SELECT LIMIT_SUBSELECT.*, ROWNUM ROWNUM_SUB FROM
+     * (
+     * <query-with-aliases>
+     * )
+     * LIMIT_SUBSELECT WHERE ROWNUM <= 30
      * ) WHERE ROWNUM_SUB > 20
-     *
+     * <p>
      * The rownum filter is evaluated before ORDER BY, which is why we need subselects
      */
     @Override
@@ -112,7 +113,12 @@ public class OracleSqlGenerationVisitor extends SqlGenerationVisitor {
                     // The system requested any column
                     return "true";
                 } else if (select.getSelectList().isSelectStar()) {
-                    builder.append(Joiner.on(", ").join(buildAliases(select.getFromClause().getMetadata().getColumns().size())));
+                    if (select.getFromClause() instanceof SqlTable) {
+                        builder.append(Joiner.on(", ").join(buildAliases(((SqlTable) select.getFromClause()).getMetadata().getColumns().size())));
+                    } else {
+                        // TODO: Implement Joins for Oracle
+                        assert (false);
+                    }
                 } else {
                     builder.append(Joiner.on(", ").join(buildAliases(select.getSelectList().getExpressions().size())));
                 }
@@ -133,7 +139,7 @@ public class OracleSqlGenerationVisitor extends SqlGenerationVisitor {
 
     private List<String> buildAliases(int numSelectListElements) {
         List<String> aliases = new ArrayList<>();
-        for (int i=0; i<numSelectListElements; i++) {
+        for (int i = 0; i < numSelectListElements; i++) {
             aliases.add("c" + i);
         }
         return aliases;
@@ -151,10 +157,15 @@ public class OracleSqlGenerationVisitor extends SqlGenerationVisitor {
                 // Do as if the user has all columns in select list
                 SqlStatementSelect select = (SqlStatementSelect) selectList.getParent();
                 int columnId = 0;
-                for (ColumnMetadata columnMeta : select.getFromClause().getMetadata().getColumns()) {
-                    SqlColumn sqlColumn = new SqlColumn(columnId, columnMeta);
-                    selectListElements.add(sqlColumn.accept(this));
-                    ++columnId;
+                if (select.getFromClause() instanceof SqlTable) {
+                    for (ColumnMetadata columnMeta : ((SqlTable) select.getFromClause()).getMetadata().getColumns()) {
+                        SqlColumn sqlColumn = new SqlColumn(columnId, columnMeta);
+                        selectListElements.add(sqlColumn.accept(this));
+                        ++columnId;
+                    }
+                } else {
+                    // TODO: Implement Joins for Oracle
+                    assert (false);
                 }
             } else {
                 selectListElements.add("*");
@@ -166,7 +177,7 @@ public class OracleSqlGenerationVisitor extends SqlGenerationVisitor {
         }
         if (requiresSelectListAliasesForLimit) {
             // Add aliases to select list elements
-            for (int i=0; i<selectListElements.size(); i++) {
+            for (int i = 0; i < selectListElements.size(); i++) {
                 selectListElements.set(i, selectListElements.get(i) + " AS c" + i);
             }
         }
@@ -216,8 +227,8 @@ public class OracleSqlGenerationVisitor extends SqlGenerationVisitor {
         StringBuilder builder = new StringBuilder();
         builder.append("LISTAGG");
         builder.append("(");
-        assert(function.getArguments() != null);
-        assert(function.getArguments().size() == 1 && function.getArguments().get(0) != null);
+        assert (function.getArguments() != null);
+        assert (function.getArguments().size() == 1 && function.getArguments().get(0) != null);
         String expression = function.getArguments().get(0).accept(this);
         builder.append(expression);
         builder.append(", ");
@@ -255,7 +266,7 @@ public class OracleSqlGenerationVisitor extends SqlGenerationVisitor {
         boolean isDirectlyInSelectList = (function.hasParent() && function.getParent().getType() == SqlNodeType.SELECT_LIST);
         if (isDirectlyInSelectList && aggregateFunctionsCast.contains(function.getFunction())) {
             // Cast to FLOAT because result set metadata has precision = 0, scale = 0
-            sql = "CAST("  + sql + " AS FLOAT)";
+            sql = "CAST(" + sql + " AS FLOAT)";
         }
         return sql;
     }
@@ -264,227 +275,227 @@ public class OracleSqlGenerationVisitor extends SqlGenerationVisitor {
     public String visit(SqlFunctionScalar function) {
         String sql = super.visit(function);
         switch (function.getFunction()) {
-        case LOCATE: {
-            List<String> argumentsSql = new ArrayList<>();
-            for (SqlNode node : function.getArguments()) {
-                argumentsSql.add(node.accept(this));
-            }
-            StringBuilder builder = new StringBuilder();
-            builder.append("INSTR(");
-            builder.append(argumentsSql.get(1));
-            builder.append(", ");
-            builder.append(argumentsSql.get(0));
-            if (argumentsSql.size() > 2) {
+            case LOCATE: {
+                List<String> argumentsSql = new ArrayList<>();
+                for (SqlNode node : function.getArguments()) {
+                    argumentsSql.add(node.accept(this));
+                }
+                StringBuilder builder = new StringBuilder();
+                builder.append("INSTR(");
+                builder.append(argumentsSql.get(1));
                 builder.append(", ");
-                builder.append(argumentsSql.get(2));
-            }
-            builder.append(")");
-            sql = builder.toString();
-            break;
-        }
-        case TRIM: {
-            List<String> argumentsSql = new ArrayList<>();
-            for (SqlNode node : function.getArguments()) {
-                argumentsSql.add(node.accept(this));
-            }
-            StringBuilder builder = new StringBuilder();
-            builder.append("TRIM(");
-            if (argumentsSql.size() > 1) {
-                builder.append(argumentsSql.get(1));
-                builder.append(" FROM ");
                 builder.append(argumentsSql.get(0));
-            } else {
-                builder.append(argumentsSql.get(0));
+                if (argumentsSql.size() > 2) {
+                    builder.append(", ");
+                    builder.append(argumentsSql.get(2));
+                }
+                builder.append(")");
+                sql = builder.toString();
+                break;
             }
-            builder.append(")");
-            sql = builder.toString();
-            break;
-        }
-        case ADD_DAYS:
-        case ADD_HOURS:
-        case ADD_MINUTES:
-        case ADD_SECONDS:
-        case ADD_WEEKS:
-        case ADD_YEARS: {
-            List<String> argumentsSql = new ArrayList<>();
-            for (SqlNode node : function.getArguments()) {
-                argumentsSql.add(node.accept(this));
+            case TRIM: {
+                List<String> argumentsSql = new ArrayList<>();
+                for (SqlNode node : function.getArguments()) {
+                    argumentsSql.add(node.accept(this));
+                }
+                StringBuilder builder = new StringBuilder();
+                builder.append("TRIM(");
+                if (argumentsSql.size() > 1) {
+                    builder.append(argumentsSql.get(1));
+                    builder.append(" FROM ");
+                    builder.append(argumentsSql.get(0));
+                } else {
+                    builder.append(argumentsSql.get(0));
+                }
+                builder.append(")");
+                sql = builder.toString();
+                break;
             }
-            StringBuilder builder = new StringBuilder();
-            builder.append("(");
-            builder.append(argumentsSql.get(0));
-            builder.append(" + INTERVAL '");
-            if (function.getFunction() == ScalarFunction.ADD_WEEKS) {
-                builder.append(7 * Integer.parseInt(argumentsSql.get(1)));
-            } else {
-                builder.append(argumentsSql.get(1));
-            }
-            builder.append("' ");
-            switch (function.getFunction()) {
             case ADD_DAYS:
-            case ADD_WEEKS:
-                builder.append("DAY");
-                break;
             case ADD_HOURS:
-                builder.append("HOUR");
-                break;
             case ADD_MINUTES:
-                builder.append("MINUTE");
-                break;
             case ADD_SECONDS:
-                builder.append("SECOND");
+            case ADD_WEEKS:
+            case ADD_YEARS: {
+                List<String> argumentsSql = new ArrayList<>();
+                for (SqlNode node : function.getArguments()) {
+                    argumentsSql.add(node.accept(this));
+                }
+                StringBuilder builder = new StringBuilder();
+                builder.append("(");
+                builder.append(argumentsSql.get(0));
+                builder.append(" + INTERVAL '");
+                if (function.getFunction() == ScalarFunction.ADD_WEEKS) {
+                    builder.append(7 * Integer.parseInt(argumentsSql.get(1)));
+                } else {
+                    builder.append(argumentsSql.get(1));
+                }
+                builder.append("' ");
+                switch (function.getFunction()) {
+                    case ADD_DAYS:
+                    case ADD_WEEKS:
+                        builder.append("DAY");
+                        break;
+                    case ADD_HOURS:
+                        builder.append("HOUR");
+                        break;
+                    case ADD_MINUTES:
+                        builder.append("MINUTE");
+                        break;
+                    case ADD_SECONDS:
+                        builder.append("SECOND");
+                        break;
+                    case ADD_YEARS:
+                        builder.append("YEAR");
+                        break;
+                    default:
+                        break;
+                }
+                builder.append(")");
+                sql = builder.toString();
                 break;
-            case ADD_YEARS:
-                builder.append("YEAR");
+            }
+            case CURRENT_DATE:
+                sql = "CURRENT_DATE";
                 break;
+            case CURRENT_TIMESTAMP:
+                sql = "CURRENT_TIMESTAMP";
+                break;
+            case DBTIMEZONE:
+                sql = "DBTIMEZONE";
+                break;
+            case LOCALTIMESTAMP:
+                sql = "LOCALTIMESTAMP";
+                break;
+            case SESSIONTIMEZONE:
+                sql = "SESSIONTIMEZONE";
+                break;
+            case SYSDATE:
+                sql = "TO_DATE(SYSDATE)";
+                break;
+            case SYSTIMESTAMP:
+                sql = "SYSTIMESTAMP";
+                break;
+            case BIT_AND:
+                sql = sql.replaceFirst("^BIT_AND", "BITAND");
+                break;
+            case BIT_TO_NUM:
+                sql = sql.replaceFirst("^BIT_TO_NUM", "BIN_TO_NUM");
+                break;
+            case NULLIFZERO: {
+                List<String> argumentsSql = new ArrayList<>();
+                for (SqlNode node : function.getArguments()) {
+                    argumentsSql.add(node.accept(this));
+                }
+                StringBuilder builder = new StringBuilder();
+                builder.append("NULLIF(");
+                builder.append(argumentsSql.get(0));
+                builder.append(", 0)");
+                sql = builder.toString();
+                break;
+            }
+            case ZEROIFNULL: {
+                List<String> argumentsSql = new ArrayList<>();
+                for (SqlNode node : function.getArguments()) {
+                    argumentsSql.add(node.accept(this));
+                }
+                StringBuilder builder = new StringBuilder();
+                builder.append("NVL(");
+                builder.append(argumentsSql.get(0));
+                builder.append(", 0)");
+                sql = builder.toString();
+                break;
+            }
+            case DIV: {
+                List<String> argumentsSql = new ArrayList<>();
+                for (SqlNode node : function.getArguments()) {
+                    argumentsSql.add(node.accept(this));
+                }
+                StringBuilder builder = new StringBuilder();
+                builder.append("CAST(FLOOR(");
+                builder.append(argumentsSql.get(0));
+                builder.append(" / ");
+                builder.append(argumentsSql.get(1));
+                builder.append(") AS NUMBER(36, 0))");
+                sql = builder.toString();
+                break;
+            }
+            case COT: {
+                List<String> argumentsSql = new ArrayList<>();
+                for (SqlNode node : function.getArguments()) {
+                    argumentsSql.add(node.accept(this));
+                }
+                StringBuilder builder = new StringBuilder();
+                builder.append("(1 / TAN(");
+                builder.append(argumentsSql.get(0));
+                builder.append("))");
+                sql = builder.toString();
+                break;
+            }
+            case DEGREES: {
+                List<String> argumentsSql = new ArrayList<>();
+                for (SqlNode node : function.getArguments()) {
+                    argumentsSql.add(node.accept(this));
+                }
+                StringBuilder builder = new StringBuilder();
+                builder.append("((");
+                builder.append(argumentsSql.get(0));
+                // ACOS(-1) = PI
+                builder.append(") * 180 / ACOS(-1))");
+                sql = builder.toString();
+                break;
+            }
+            case RADIANS: {
+                List<String> argumentsSql = new ArrayList<>();
+                for (SqlNode node : function.getArguments()) {
+                    argumentsSql.add(node.accept(this));
+                }
+                StringBuilder builder = new StringBuilder();
+                builder.append("((");
+                builder.append(argumentsSql.get(0));
+                // ACOS(-1) = PI
+                builder.append(") * ACOS(-1) / 180)");
+                sql = builder.toString();
+                break;
+            }
+            case REPEAT: {
+                List<String> argumentsSql = new ArrayList<>();
+                for (SqlNode node : function.getArguments()) {
+                    argumentsSql.add(node.accept(this));
+                }
+                StringBuilder builder = new StringBuilder();
+                builder.append("RPAD(TO_CHAR(");
+                builder.append(argumentsSql.get(0));
+                builder.append("), LENGTH(");
+                builder.append(argumentsSql.get(0));
+                builder.append(") * ROUND(");
+                builder.append(argumentsSql.get(1));
+                builder.append("), ");
+                builder.append(argumentsSql.get(0));
+                builder.append(")");
+                sql = builder.toString();
+                break;
+            }
+            case REVERSE: {
+                List<String> argumentsSql = new ArrayList<>();
+                for (SqlNode node : function.getArguments()) {
+                    argumentsSql.add(node.accept(this));
+                }
+                StringBuilder builder = new StringBuilder();
+                builder.append("REVERSE(TO_CHAR(");
+                builder.append(argumentsSql.get(0));
+                builder.append("))");
+                sql = builder.toString();
+                break;
+            }
             default:
                 break;
-            }
-            builder.append(")");
-            sql = builder.toString();
-            break;
-        }
-        case CURRENT_DATE:
-            sql = "CURRENT_DATE";
-            break;
-        case CURRENT_TIMESTAMP:
-            sql = "CURRENT_TIMESTAMP";
-            break;
-        case DBTIMEZONE:
-            sql = "DBTIMEZONE";
-            break;
-        case LOCALTIMESTAMP:
-            sql = "LOCALTIMESTAMP";
-            break;
-        case SESSIONTIMEZONE:
-            sql = "SESSIONTIMEZONE";
-            break;
-        case SYSDATE:
-            sql = "TO_DATE(SYSDATE)";
-            break;
-        case SYSTIMESTAMP:
-            sql = "SYSTIMESTAMP";
-            break;
-        case BIT_AND:
-            sql = sql.replaceFirst("^BIT_AND", "BITAND");
-            break;
-        case BIT_TO_NUM:
-            sql = sql.replaceFirst("^BIT_TO_NUM", "BIN_TO_NUM");
-            break;
-        case NULLIFZERO: {
-            List<String> argumentsSql = new ArrayList<>();
-            for (SqlNode node : function.getArguments()) {
-                argumentsSql.add(node.accept(this));
-            }
-            StringBuilder builder = new StringBuilder();
-            builder.append("NULLIF(");
-            builder.append(argumentsSql.get(0));
-            builder.append(", 0)");
-            sql = builder.toString();
-            break;
-        }
-        case ZEROIFNULL: {
-            List<String> argumentsSql = new ArrayList<>();
-            for (SqlNode node : function.getArguments()) {
-                argumentsSql.add(node.accept(this));
-            }
-            StringBuilder builder = new StringBuilder();
-            builder.append("NVL(");
-            builder.append(argumentsSql.get(0));
-            builder.append(", 0)");
-            sql = builder.toString();
-            break;
-        }
-        case DIV: {
-            List<String> argumentsSql = new ArrayList<>();
-            for (SqlNode node : function.getArguments()) {
-                argumentsSql.add(node.accept(this));
-            }
-            StringBuilder builder = new StringBuilder();
-            builder.append("CAST(FLOOR(");
-            builder.append(argumentsSql.get(0));
-            builder.append(" / ");
-            builder.append(argumentsSql.get(1));
-            builder.append(") AS NUMBER(36, 0))");
-            sql = builder.toString();
-            break;
-        }
-        case COT: {
-            List<String> argumentsSql = new ArrayList<>();
-            for (SqlNode node : function.getArguments()) {
-                argumentsSql.add(node.accept(this));
-            }
-            StringBuilder builder = new StringBuilder();
-            builder.append("(1 / TAN(");
-            builder.append(argumentsSql.get(0));
-            builder.append("))");
-            sql = builder.toString();
-            break;
-        }
-        case DEGREES: {
-            List<String> argumentsSql = new ArrayList<>();
-            for (SqlNode node : function.getArguments()) {
-                argumentsSql.add(node.accept(this));
-            }
-            StringBuilder builder = new StringBuilder();
-            builder.append("((");
-            builder.append(argumentsSql.get(0));
-            // ACOS(-1) = PI
-            builder.append(") * 180 / ACOS(-1))");
-            sql = builder.toString();
-            break;
-        }
-        case RADIANS: {
-            List<String> argumentsSql = new ArrayList<>();
-            for (SqlNode node : function.getArguments()) {
-                argumentsSql.add(node.accept(this));
-            }
-            StringBuilder builder = new StringBuilder();
-            builder.append("((");
-            builder.append(argumentsSql.get(0));
-            // ACOS(-1) = PI
-            builder.append(") * ACOS(-1) / 180)");
-            sql = builder.toString();
-            break;
-        }
-        case REPEAT: {
-            List<String> argumentsSql = new ArrayList<>();
-            for (SqlNode node : function.getArguments()) {
-                argumentsSql.add(node.accept(this));
-            }
-            StringBuilder builder = new StringBuilder();
-            builder.append("RPAD(TO_CHAR(");
-            builder.append(argumentsSql.get(0));
-            builder.append("), LENGTH(");
-            builder.append(argumentsSql.get(0));
-            builder.append(") * ROUND(");
-            builder.append(argumentsSql.get(1));
-            builder.append("), ");
-            builder.append(argumentsSql.get(0));
-            builder.append(")");
-            sql = builder.toString();
-            break;
-        }
-        case REVERSE: {
-            List<String> argumentsSql = new ArrayList<>();
-            for (SqlNode node : function.getArguments()) {
-                argumentsSql.add(node.accept(this));
-            }
-            StringBuilder builder = new StringBuilder();
-            builder.append("REVERSE(TO_CHAR(");
-            builder.append(argumentsSql.get(0));
-            builder.append("))");
-            sql = builder.toString();
-            break;
-        }
-        default:
-            break;
         }
 
         boolean isDirectlyInSelectList = (function.hasParent() && function.getParent().getType() == SqlNodeType.SELECT_LIST);
         if (isDirectlyInSelectList && scalarFunctionsCast.contains(function.getFunction())) {
             // Cast to FLOAT because result set metadata has precision = 0, scale = 0
-            sql = "CAST("  + sql + " AS FLOAT)";
+            sql = "CAST(" + sql + " AS FLOAT)";
         }
 
         return sql;
@@ -497,17 +508,17 @@ public class OracleSqlGenerationVisitor extends SqlGenerationVisitor {
         }
         String typeName = ColumnAdapterNotes.deserialize(column.getMetadata().getAdapterNotes(), column.getMetadata().getName()).getTypeName();
         if (typeName.startsWith("TIMESTAMP") ||
-            typeName.startsWith("INTERVAL") ||
-            typeName.equals("BINARY_FLOAT") ||
-            typeName.equals("BINARY_DOUBLE") ||
-            typeName.equals("CLOB") ||
-            typeName.equals("NCLOB")) {
+                typeName.startsWith("INTERVAL") ||
+                typeName.equals("BINARY_FLOAT") ||
+                typeName.equals("BINARY_DOUBLE") ||
+                typeName.equals("CLOB") ||
+                typeName.equals("NCLOB")) {
             projString = "TO_CHAR(" + projString + ")";
         } else if (typeName.equals("NUMBER") &&
-                   column.getMetadata().getType().getExaDataType() == DataType.ExaDataType.VARCHAR) {
+                column.getMetadata().getType().getExaDataType() == DataType.ExaDataType.VARCHAR) {
             projString = "TO_CHAR(" + projString + ")";
         } else if (typeName.equals("ROWID") ||
-                   typeName.equals("UROWID")) {
+                typeName.equals("UROWID")) {
             projString = "ROWIDTOCHAR(" + projString + ")";
         } else if (typeName.equals("BLOB")) {
             projString = "UTL_RAW.CAST_TO_VARCHAR2(" + projString + ")";
@@ -515,11 +526,11 @@ public class OracleSqlGenerationVisitor extends SqlGenerationVisitor {
         return projString;
     }
 
-    private static final List<String> TYPE_NAMES_REQUIRING_CAST = ImmutableList.of("TIMESTAMP","INTERVAL","BINARY_FLOAT","BINARY_DOUBLE","CLOB","NCLOB","ROWID", "UROWID", "BLOB");
+    private static final List<String> TYPE_NAMES_REQUIRING_CAST = ImmutableList.of("TIMESTAMP", "INTERVAL", "BINARY_FLOAT", "BINARY_DOUBLE", "CLOB", "NCLOB", "ROWID", "UROWID", "BLOB");
 
     private boolean nodeRequiresCast(SqlNode node) {
         if (node.getType() == SqlNodeType.COLUMN) {
-            SqlColumn column = (SqlColumn)node;
+            SqlColumn column = (SqlColumn) node;
             String typeName = ColumnAdapterNotes.deserialize(column.getMetadata().getAdapterNotes(), column.getMetadata().getName()).getTypeName();
             return TYPE_NAMES_REQUIRING_CAST.contains(typeName);
         }
