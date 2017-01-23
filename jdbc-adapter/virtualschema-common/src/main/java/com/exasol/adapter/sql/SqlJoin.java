@@ -10,8 +10,8 @@ import java.util.List;
  */
 public class SqlJoin extends SqlNode {
 
-    private List<SqlNode> parentTables;
-    private List<SqlNode> adjoinedTables;
+    private SqlNode left;
+    private SqlNode right;
     private SqlJoinType joinType;
     private SqlNode condition;
 
@@ -26,19 +26,19 @@ public class SqlJoin extends SqlNode {
     }
 
 
-    public SqlJoin(List<SqlNode> parentTables, List<SqlNode> adjoinedTables, SqlJoinType joinType, SqlNode condition) {
-        this.parentTables = parentTables;
-        this.adjoinedTables = adjoinedTables;
+    public SqlJoin(SqlNode left, SqlNode right, SqlJoinType joinType, SqlNode condition) {
+        this.left = left;
+        this.right = right;
         this.joinType = joinType;
         this.condition = condition;
     }
 
-    public List<SqlNode> getParentTables() {
-        return parentTables;
+    public SqlNode getLeft() {
+        return left;
     }
 
-    public List<SqlNode> getAdjoinedTables() {
-        return adjoinedTables;
+    public SqlNode getRight() {
+        return right;
     }
 
     public SqlJoinType getJoinType() {
@@ -51,20 +51,15 @@ public class SqlJoin extends SqlNode {
 
     @Override
     String toSimpleSql() {
-        List<String> parentList = new ArrayList<>();
-        for (SqlNode node : parentTables) {
-            parentList.add(node.toSimpleSql());
-        }
-        String parents = Joiner.on(", ").join(parentList);
-        List<String> adjoinList = new ArrayList<>();
-        for (SqlNode node : adjoinedTables) {
-            adjoinList.add(node.toSimpleSql());
-        }
-        String adjoins = Joiner.on(", ").join(adjoinList);
-        String type = joinType.toString();
-        String condition = getCondition().toSimpleSql();
-
-        return parents + " " + type + " JOIN " + adjoins + " ON " + condition;
+        StringBuilder builder = new StringBuilder();
+        builder.append(left.toSimpleSql());
+        builder.append(" ");
+        builder.append(joinType.toString());
+        builder.append(" JOIN ");
+        builder.append(right.toSimpleSql());
+        builder.append(" ON ");
+        builder.append(condition.toSimpleSql());
+        return builder.toString();
     }
 
 }

@@ -55,5 +55,4 @@ public enum SqlNodeType {
 
 
     JOIN,
-    JOINED_TABLE
 }

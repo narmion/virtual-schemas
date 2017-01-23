@@ -524,38 +524,24 @@ public class RequestJsonParser {
         }
 
         case JOIN: {
-            List<SqlNode> parents = new ArrayList<>();
-            if (exp.containsKey("parent_tables")) {
-                for (JsonObject argument : exp.getJsonArray("parent_tables").getValuesAs(JsonObject.class)) {
-                    parents.add(parseExpression(argument));
-                }
+            SqlNode left = null;
+            if (exp.containsKey("left")) {
+                left = parseExpression(exp.getJsonObject("left"));
             }
-
-            List<SqlNode> adjoins = new ArrayList<>();
-            if (exp.containsKey("adjoined_tables")) {
-                for (JsonObject argument : exp.getJsonArray("adjoined_tables").getValuesAs(JsonObject.class)) {
-                    adjoins.add(parseExpression(argument));
-                }
+            SqlNode right = null;
+            if (exp.containsKey("left")) {
+                right = parseExpression(exp.getJsonObject("right"));
             }
-
-            SqlJoinType joinType = SqlJoinType.valueOf(exp.getString("join_type").toUpperCase());
+            SqlJoinType joinType = null;
+            if (exp.containsKey("join_type")) {
+                joinType = SqlJoinType.valueOf(exp.getString("join_type").toUpperCase());
+            }
             SqlNode condition = null;
             if (exp.containsKey("condition")) {
                 condition = parseExpression(exp.getJsonObject("condition"));
             }
-            return new SqlJoin(parents, adjoins, joinType, condition);
+            return new SqlJoin(left, right, joinType, condition);
         }
-
-        case JOINED_TABLE: {
-            List<SqlNode> joins = new ArrayList<>();
-            if (exp.containsKey("joins")) {
-                for (JsonObject argument : exp.getJsonArray("joins").getValuesAs(JsonObject.class)) {
-                    joins.add(parseExpression(argument));
-                }
-            }
-            return new SqlJoinedTable(joins);
-        }
-
         default:
             throw new RuntimeException("Unknown node type: " + typeName);
         }

@@ -84,6 +84,4 @@ public interface SqlNodeVisitor<R> {
 
     public R visit(SqlJoin sqlJoin);
 
-    public R visit(SqlJoinedTable sqlJoinedTable);
-
 }
