@@ -1,5 +1,6 @@
 package com.exasol.adapter.jdbc;
 
+import com.exasol.adapter.AdapterException;
 import com.exasol.adapter.dialects.SqlDialect;
 import com.exasol.adapter.dialects.SqlDialectContext;
 import com.exasol.adapter.dialects.SqlDialects;
@@ -24,7 +25,7 @@ public class JdbcMetadataReader {
                                                     String schema,
                                                     List<String> tableFilter,
                                                     SqlDialects dialects,
-                                                    String dialectName) throws SQLException {
+                                                    String dialectName) throws SQLException, AdapterException {
         assert (catalog != null);
         assert (schema != null);
         try {
@@ -86,7 +87,7 @@ public class JdbcMetadataReader {
         return DriverManager.getConnection(connectionString, info);
     }
 
-    private static String findCatalog(String catalog, DatabaseMetaData dbMeta, SqlDialect dialect) throws SQLException {
+    private static String findCatalog(String catalog, DatabaseMetaData dbMeta, SqlDialect dialect) throws SQLException, AdapterException {
         boolean foundCatalog = false;
         String curCatalog = "";
         int numCatalogs = 0;
@@ -129,16 +130,16 @@ public class JdbcMetadataReader {
             } else {
                 if (catalog.isEmpty()) {
                     if (dialect.supportsJdbcCatalogs() == SqlDialect.SchemaOrCatalogSupport.SUPPORTED) {
-                        throw new RuntimeException("You have to specify a catalog. Available catalogs: " + Joiner.on(", ").join(allCatalogs));
+                        throw new AdapterException("You have to specify a catalog. Available catalogs: " + Joiner.on(", ").join(allCatalogs));
                     } else {
                         if (numCatalogs == 0) {
                             return null;
                         } else {
-                            throw new RuntimeException("You have to specify a catalog. Available catalogs: " + Joiner.on(", ").join(allCatalogs));
+                            throw new AdapterException("You have to specify a catalog. Available catalogs: " + Joiner.on(", ").join(allCatalogs));
                         }
                     }
                 } else {
-                    throw new RuntimeException("Catalog " + catalog + " does not exist. Available catalogs: " + Joiner.on(", ").join(allCatalogs));
+                    throw new AdapterException("Catalog " + catalog + " does not exist. Available catalogs: " + Joiner.on(", ").join(allCatalogs));
                 }
             }
         } else {
@@ -150,15 +151,15 @@ public class JdbcMetadataReader {
                     // Take the one and only catalog (in case of EXASOL this is always EXA_DB). Returning null would probably also work fine.
                     return curCatalog;
                 } else {
-                    throw new RuntimeException("Error: The data source is not expected to support catalogs, but has " + numCatalogs + " catalogs: " + Joiner.on(", ").join(allCatalogs));
+                    throw new AdapterException("The data source is not expected to support catalogs, but has " + numCatalogs + " catalogs: " + Joiner.on(", ").join(allCatalogs));
                 }
             } else {
-                throw new RuntimeException("You specified a catalog, however the data source does not support the concept of catalogs.");
+                throw new AdapterException("You specified a catalog, however the data source does not support the concept of catalogs.");
             }
         }
     }
 
-    private static String findSchema(String schema, DatabaseMetaData dbMeta, SqlDialect dialect) throws SQLException {
+    private static String findSchema(String schema, DatabaseMetaData dbMeta, SqlDialect dialect) throws SQLException, AdapterException {
         // Check if schema exists
         boolean foundSchema = false;
         List<String> allSchemas = new ArrayList<>();
@@ -204,16 +205,16 @@ public class JdbcMetadataReader {
             } else {
                 if (schema.isEmpty()) {
                     if (dialect.supportsJdbcSchemas() == SqlDialect.SchemaOrCatalogSupport.SUPPORTED) {
-                        throw new RuntimeException("You have to specify a schema. Available schemas: " + Joiner.on(", ").join(allSchemas));
+                        throw new AdapterException("You have to specify a schema. Available schemas: " + Joiner.on(", ").join(allSchemas));
                     } else {
                         if (numSchemas == 0) {
                             return null;
                         } else {
-                            throw new RuntimeException("You have to specify a schema. Available schemas: " + Joiner.on(", ").join(allSchemas));
+                            throw new AdapterException("You have to specify a schema. Available schemas: " + Joiner.on(", ").join(allSchemas));
                         }
                     }
                 } else {
-                    throw new RuntimeException("Schema " + schema + " does not exist. Available schemas: " + Joiner.on(", ").join(allSchemas));
+                    throw new AdapterException("Schema " + schema + " does not exist. Available schemas: " + Joiner.on(", ").join(allSchemas));
                 }
             }
         } else {
@@ -225,54 +226,57 @@ public class JdbcMetadataReader {
                     // Take the one and only schema. Returning null would probably also work fine.
                     return curSchema;
                 } else {
-                    throw new RuntimeException("Error: The data source is not expected to support schemas, but has " + numSchemas + " schemas: " + Joiner.on(", ").join(allSchemas));
+                    throw new AdapterException("The data source is not expected to support schemas, but has " + numSchemas + " schemas: " + Joiner.on(", ").join(allSchemas));
                 }
             } else {
-                throw new RuntimeException("You specified a schema, however the data source does not support the concept of schemas.");
+                throw new AdapterException("You specified a schema, however the data source does not support the concept of schemas.");
             }
         }
     }
 
     private static List<TableMetadata> findTables(String catalog, String schema, List<String> tableFilter, DatabaseMetaData dbMeta, SqlDialect dialect) throws SQLException {
         List<TableMetadata> tables = new ArrayList<>();
-        ResultSet resTables = dbMeta.getTables(catalog, schema, null, null);
-        List<String> tableNames = new ArrayList<>();
-        List<String> tableComments = new ArrayList<>();
+        
+        String[] supportedTableTypes = {"TABLE", "VIEW", "SYSTEM TABLE"};
+        
+        ResultSet resTables = dbMeta.getTables(catalog, schema, null, supportedTableTypes);
+        List< SqlDialect.MappedTable> tablesMapped = new ArrayList<>();
+        //List<String> tableComments = new ArrayList<>();
         while (resTables.next()) {
             SqlDialect.MappedTable mappedTable = dialect.mapTable(resTables);
             if (!mappedTable.isIgnored()) {
-                tableNames.add(mappedTable.getTableName());
-                tableComments.add(mappedTable.getTableComment());
+            	tablesMapped.add(mappedTable);
+                //tableComments.add(mappedTable.getTableComment());
             }
         }
         
         resTables.close();
 
         // Columns
-        for (int i=0; i<tableNames.size(); ++i) {
-            String table = tableNames.get(i);
+        for (int i=0; i<tablesMapped.size(); ++i) {
+        	SqlDialect.MappedTable table = tablesMapped.get(i);
             System.out.println("Process columns for table: " + table);
             try {
                 if (!tableFilter.isEmpty()) {
                     boolean isInFilter = false;
                     if (identifiersAreCaseInsensitive(dialect)) {
                         for (String curTable : tableFilter) {
-                            if (curTable.equalsIgnoreCase(table)) {
+                            if (curTable.equalsIgnoreCase(table.getTableName())) {
                                 isInFilter = true;
                             }
                         }
                     } else {
-                        isInFilter = tableFilter.contains(table);
+                        isInFilter = tableFilter.contains(table.getTableName());
                     }
                     if (!isInFilter) {
                         System.out.println("Skip table: " + table);
                         continue;
                     }
                 }
-                List<ColumnMetadata> columns = readColumns(dbMeta, catalog, schema, table, dialect);
-                tables.add(new TableMetadata(table, "", columns, tableComments.get(i)));
+                List<ColumnMetadata> columns = readColumns(dbMeta, catalog, schema, table.getOriginalTableName(), dialect);
+                tables.add(new TableMetadata(table.getTableName(), "", columns, table.getTableComment()));
             } catch (Exception ex) {
-                throw new RuntimeException("Exception for table " + table, ex);
+                throw new RuntimeException("Exception for table " + table.getOriginalTableName(), ex);
             }
         }
         return tables;

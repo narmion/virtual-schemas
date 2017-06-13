@@ -1,5 +1,6 @@
 package com.exasol.adapter.dialects.impl;
 
+
 import com.exasol.adapter.dialects.AbstractIntegrationTest;
 import org.junit.Assume;
 import org.junit.BeforeClass;
@@ -22,7 +23,7 @@ public class ImpalaSqlDialectIT extends AbstractIntegrationTest {
     private static final String VIRTUAL_SCHEMA = "VS_IMPALA";
     private static final String IMPALA_SCHEMA = "default";
     private static final boolean IS_LOCAL = false;
-
+    
     @BeforeClass
     public static void setUpClass() throws FileNotFoundException, SQLException, ClassNotFoundException {
         Assume.assumeTrue(getConfig().impalaTestsRequested());

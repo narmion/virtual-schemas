@@ -43,7 +43,13 @@ public class SqlDialects {
             return new TeradataSqlDialect(context);
         } else if (name.equalsIgnoreCase(RedshiftSqlDialect.NAME)) {
             return new RedshiftSqlDialect(context);
-        } 
+        } else if (name.equalsIgnoreCase(DB2SqlDialect.NAME)) {
+	        return new DB2SqlDialect(context);
+        } else if (name.equalsIgnoreCase(SqlServerSqlDialect.NAME)) {
+        	return new SqlServerSqlDialect(context);
+        } else if (name.equalsIgnoreCase(PostgreSQLSqlDialect.NAME)) {
+        	return new PostgreSQLSqlDialect(context);
+        }
         else {
             return null;
         }
